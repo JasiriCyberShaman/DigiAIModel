@@ -131,13 +131,21 @@ export function initWynamon(containerId) {
             if (color && glowMaterial) glowMaterial.emissive.setHex(color);
         }
 
-        // E. TEXTURE
-        if (type === "SET_TEXTURE" && url && bodyMaterial) {
-            new THREE.TextureLoader().load(url, (t) => {
-                t.flipY = false;
-                bodyMaterial.map = t;
-                bodyMaterial.needsUpdate = true;
-            });
-        }
+        // E. TEXTURE SWAP (Corrected for Color Space)
+if (type === "SET_TEXTURE" && url && bodyMaterial) {
+    const textureLoader = new THREE.TextureLoader();
+    textureLoader.load(url, (texture) => {
+        // FORCE SRGB: This prevents the desaturation/wash-out
+        texture.colorSpace = THREE.SRGBColorSpace; 
+        
+        texture.flipY = false; 
+        bodyMaterial.map = texture;
+        
+        // Ensure the material re-renders with the new settings
+        bodyMaterial.needsUpdate = true;
+        
+        console.log("System: Body texture updated with SRGB color correction.");
+    });
+}
     });
 }
