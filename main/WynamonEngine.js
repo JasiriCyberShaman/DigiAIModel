@@ -47,8 +47,8 @@ export function initWynamon(containerId) {
             actions[clip.name] = mixer.clipAction(clip);
         });
 
-        // Set Default State: Walk
-        if (actions['walk']) actions['walk'].play();
+        // Set Default State: Idle
+        if (actions['idle']) actions['idle'].play();
         
         console.log("Wynamon Engine: Hardware Synced.", Object.keys(actions));
         animate();
