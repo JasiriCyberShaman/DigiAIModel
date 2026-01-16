@@ -101,5 +101,23 @@ export function initWynamon(containerId) {
                 console.log("System: Texture buffer swapped.");
             });
         }
+                // Inside your message listener in WynamonEngine.js
+        if (type === "MANUAL_MORPH") {
+            scene.traverse((child) => {
+                // Find the specific mesh by name
+                if (child.isMesh && child.name === "chr321_0") {
+                    const dictionary = child.morphTargetDictionary;
+                    
+                    // Look up the index of the "MouthOpen" register
+                    if (dictionary && dictionary["MouthOpen"] !== undefined) {
+                        const index = dictionary["MouthOpen"];
+                        
+                        // Set the value (e.g., event.data.value from 0 to 1)
+                        child.morphTargetInfluences[index] = event.data.value;
+                        console.log(`System: Morph ${index} set to ${event.data.value}`);
+                    }
+                }
+            });
+        }
     });
 }
