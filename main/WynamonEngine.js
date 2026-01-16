@@ -3,17 +3,22 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 let scene, camera, renderer, mixer, clock;
 const actions = {};
+let currentBaseAction = null;
 let currentMouthAction = null;
 
-// Glow State Variables
+// Lerp State Registers
 let glowMaterial = null;
-let targetGlow = 0; 
-let currentGlow = 0;
+let targetGlow = 0, currentGlow = 0, glowRate = 0.05;
 
-// Texture State Variables
 let bodyMaterial = null;
 
-// DETECTION: Finds the repository base path relative to where this script is hosted
+// Morph Target Registers
+let mouthMesh = null;
+let targetMouth = 0, currentMouth = 0, mouthLerpRate = 0.1;
+
+// Animation Lerp (Crossfade)
+let targetBaseRate = 0.5; // Duration of crossfade in seconds
+
 const SCRIPT_URL = new URL(import.meta.url);
 const pathParts = SCRIPT_URL.pathname.split('/');
 pathParts.pop(); 
@@ -24,10 +29,8 @@ export function initWynamon(containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // --- 1. CORE ENGINE SETUP ---
     scene = new THREE.Scene();
     clock = new THREE.Clock();
-    
     camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
     camera.position.set(0, 0.5, 2);
 
@@ -36,29 +39,21 @@ export function initWynamon(containerId) {
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
 
-    const light = new THREE.HemisphereLight(0xffffff, 0x444444, 3);
-    scene.add(light);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 3));
 
-    // --- 2. MODEL LOADING ---
     const loader = new GLTFLoader();
     loader.load(DEFAULT_MODEL, (gltf) => {
         const model = gltf.scene;
         scene.add(model);
 
-        // MAP HARDWARE: Identify specific meshes and materials
         model.traverse((child) => {
-            // Target the Horn for Glow
             if (child.isMesh && child.name === "Cone") {
                 glowMaterial = child.material;
                 glowMaterial.emissiveIntensity = 0;
-                glowMaterial.emissive.setHex(0x00ffff); 
-                console.log("System: GlowHorn mapped on 'Cone'");
             }
-
-            // Target the Body for Texture Swaps
             if (child.isMesh && child.name === "chr321_0") {
                 bodyMaterial = child.material;
-                console.log("System: basemat mapped on 'chr321_0'");
+                mouthMesh = child; // Reference for manual morphs
             }
         });
 
@@ -67,74 +62,82 @@ export function initWynamon(containerId) {
             actions[clip.name] = mixer.clipAction(clip);
         });
 
-        if (actions['idle']) actions['idle'].play();
+        // Initialize default state
+        if (actions['idle']) {
+            currentBaseAction = actions['idle'];
+            currentBaseAction.play();
+        }
         
-        console.log("Wynamon Engine: Online. Tracks:", Object.keys(actions));
         animate();
     });
 
-    // --- 3. EXECUTION LOOP ---
     function animate() {
         requestAnimationFrame(animate);
         const delta = clock.getDelta();
 
-        // LERP: Smooth transition for the horn glow
+        // 1. LERP: Glow
         if (glowMaterial) {
-            currentGlow += (targetGlow - currentGlow) * 0.05; 
-            glowMaterial.emissiveIntensity = currentGlow * 2.5; 
+            currentGlow += (targetGlow - currentGlow) * glowRate;
+            glowMaterial.emissiveIntensity = currentGlow * 2.5;
+        }
+
+        // 2. LERP: Manual Morph (Mouth)
+        if (mouthMesh) {
+            const dict = mouthMesh.morphTargetDictionary;
+            if (dict && dict["MouthOpen"] !== undefined) {
+                currentMouth += (targetMouth - currentMouth) * mouthLerpRate;
+                mouthMesh.morphTargetInfluences[dict["MouthOpen"]] = currentMouth;
+            }
         }
 
         if (mixer) mixer.update(delta);
         renderer.render(scene, camera);
     }
 
-    // --- 4. SIGNAL INTERRUPT HANDLER ---
     window.addEventListener("message", (e) => {
-        const { type, animation, name, url, value, state, color } = e.data;
+        const { type, animation, name, url, value, state, color, rate } = e.data;
 
-        // A. BASE ANIMATION (Exclusive)
+        // A. BASE ANIMATION (Lerp via Crossfade)
         if (type === "SET_ANIMATION" && actions[animation]) {
-            Object.values(actions).forEach(a => a.stop());
-            actions[animation].play();
+            const nextAction = actions[animation];
+            const fadeTime = rate || 0.5; // Passed from .tsx as seconds
+            
+            if (currentBaseAction !== nextAction) {
+                nextAction.reset().fadeIn(fadeTime).play();
+                if (currentBaseAction) currentBaseAction.fadeOut(fadeTime);
+                currentBaseAction = nextAction;
+            }
         }
 
         // B. ADDITIVE BLEND (Mouth/Roar)
         if (type === "SET_MORPH" && actions[name]) {
-            if (currentMouthAction) currentMouthAction.fadeOut(0.1);
+            const fade = rate || 0.1;
+            if (currentMouthAction) currentMouthAction.fadeOut(fade);
             currentMouthAction = actions[name];
-            currentMouthAction.reset().setLoop(THREE.LoopOnce).fadeIn(0.1).play();
+            currentMouthAction.reset().setLoop(THREE.LoopOnce).fadeIn(fade).play();
             currentMouthAction.clampWhenFinished = true;
         }
 
-        // C. TEXTURE SWAP (Specifically targeting bodyMaterial)
-        if (type === "SET_TEXTURE" && url && bodyMaterial) {
-            const textureLoader = new THREE.TextureLoader();
-            textureLoader.load(url, (texture) => {
-                texture.flipY = false; 
-                bodyMaterial.map = texture;
-                bodyMaterial.needsUpdate = true;
-                console.log("System: Body texture updated.");
-            });
-        }
-
-        // D. MANUAL MORPH OVERRIDE
+        // C. MANUAL MORPH (Lerp via internal drift)
         if (type === "MANUAL_MORPH") {
-            scene.traverse((child) => {
-                if (child.isMesh && child.name === "chr321_0") {
-                    const dict = child.morphTargetDictionary;
-                    if (dict && dict["MouthOpen"] !== undefined) {
-                        child.morphTargetInfluences[dict["MouthOpen"]] = value;
-                    }
-                }
-            });
+            targetMouth = value;
+            if (rate) mouthLerpRate = rate; // "rate" is the 0.0-1.0 step size
         }
 
-        // E. GLOW CONTROL (Specifically targeting glowMaterial)
+        // D. GLOW (Lerp via internal drift)
         if (type === "SET_GLOW") {
             targetGlow = state === "ON" ? 1 : 0;
-            if (color && glowMaterial) {
-                glowMaterial.emissive.setHex(color);
-            }
+            if (rate) glowRate = rate;
+            if (color && glowMaterial) glowMaterial.emissive.setHex(color);
+        }
+
+        // E. TEXTURE
+        if (type === "SET_TEXTURE" && url && bodyMaterial) {
+            new THREE.TextureLoader().load(url, (t) => {
+                t.flipY = false;
+                bodyMaterial.map = t;
+                bodyMaterial.needsUpdate = true;
+            });
         }
     });
 }
