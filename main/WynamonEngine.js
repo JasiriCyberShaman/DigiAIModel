@@ -4,7 +4,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 let scene, camera, renderer, mixer, clock;
 const actions = {};
 let currentMouthAction = null;
-
+let glowMaterial = null;
+let targetGlow = 0; // 0 for OFF, 1 for ON
+let currentGlow = 0;
 // DETECTION: Finds the repository base path relative to where this script is hosted
 const SCRIPT_URL = new URL(import.meta.url);
 const REPO_BASE = SCRIPT_URL.origin + SCRIPT_URL.pathname.substring(0, SCRIPT_URL.pathname.lastIndexOf('/'));
@@ -40,6 +42,16 @@ export function initWynamon(containerId) {
         const model = gltf.scene;
         scene.add(model);
 
+        // Identify the GlowHorn material
+    model.traverse((child) => {
+        if (child.isMesh && child.material.name === "GlowHorn") {
+            glowMaterial = child.material;
+            // Initialize emission settings
+            glowMaterial.emissiveIntensity = 0;
+            glowMaterial.emissive.setHex(0x00ffff); // Set your Cyber Shaman Cyan color here
+        }
+    });
+
         // Initialize the Animation Mixer on the model
         mixer = new THREE.AnimationMixer(model);
         
@@ -59,6 +71,14 @@ export function initWynamon(containerId) {
     function animate() {
         requestAnimationFrame(animate);
         const delta = clock.getDelta();
+
+        // LERP Logic: Smoothly transition currentGlow toward targetGlow
+        if (glowMaterial) {
+        // Higher value (0.1) = faster snap, lower (0.02) = slow cinematic fade
+        currentGlow += (targetGlow - currentGlow) * 0.05; 
+        glowMaterial.emissiveIntensity = currentGlow * 2.0; // Scale intensity as needed
+        }
+
         if (mixer) mixer.update(delta);
         renderer.render(scene, camera);
     }
@@ -118,6 +138,14 @@ export function initWynamon(containerId) {
                     }
                 }
             });
+        }
+
+        if (type === "SET_GLOW") {
+        targetGlow = state === "ON" ? 1 : 0;
+        if (color && glowMaterial) {
+            glowMaterial.emissive.setHex(color);
+        }
+            console.log(`System: Glow target set to ${state}`);
         }
     });
 }
