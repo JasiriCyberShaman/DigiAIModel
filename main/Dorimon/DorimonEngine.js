@@ -65,6 +65,16 @@ export function initDorimon(containerId) {
                 bodyMaterial = child.material;
                 bodyMesh = child;
 
+                        // RECTIFICATION: Ensures texture aligns with Blender's UV export
+                if (bodyMaterial.map) {
+                    bodyMaterial.map.flipY = false; 
+                    bodyMaterial.map.colorSpace = THREE.SRGBColorSpace;
+                }
+
+                // SIDES: Prevents "Inside-Out" rendering/clipping
+                bodyMaterial.side = THREE.FrontSide; 
+                bodyMaterial.needsUpdate = true;
+
                 // FORCE INITIAL TEXTURE: Ensures he isn't black on boot
                 const texLoader = new THREE.TextureLoader();
                 const defaultTexUrl = `${REPO_BASE}/Neutral466.jpg`; // Ensure this path is correct
