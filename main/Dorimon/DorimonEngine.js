@@ -71,21 +71,8 @@ renderer = new THREE.WebGLRenderer({
             if (child.isMesh && child.name === "DorimonMesh") {
                 bodyMesh = child;
         bodyMaterial = child.material;
+        
 
-        // FORCE CORRECT RENDERING
-        bodyMaterial.side = THREE.FrontSide; // Only render the outside face
-        bodyMaterial.shadowSide = THREE.FrontSide;
-        bodyMaterial.flatShading = false; // Ensure smooth interpolation
-        
-        // COLOR BUFFER SYNC
-        if (bodyMaterial.map) {
-            bodyMaterial.map.flipY = false; 
-            bodyMaterial.map.colorSpace = THREE.SRGBColorSpace;
-            bodyMaterial.map.needsUpdate = true;
-        }
-        
-        bodyMaterial.needsUpdate = true;
-        console.log("[Dorimon OS]: Hardware Normals synchronized.");
                 
                 // FORCE INITIAL TEXTURE: Ensures he isn't black on boot
                 const texLoader = new THREE.TextureLoader();
@@ -109,7 +96,6 @@ renderer = new THREE.WebGLRenderer({
         if (actions['Idle.001']) actions['Idle.001'].play();
         animate();
     });
-
 
     function animate() {
         requestAnimationFrame(animate);
