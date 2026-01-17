@@ -35,7 +35,7 @@ export function initDorimon(containerId) {
     clock = new THREE.Clock();
     // B. Narrow the Near/Far Plane
 // Reduces the 'search area' for the camera, making depth calculations more accurate
-camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.5, 20);
+camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.0001, 100);
     camera.position.set(0, 1, 2);
 
     // A. Increase Depth Precision
