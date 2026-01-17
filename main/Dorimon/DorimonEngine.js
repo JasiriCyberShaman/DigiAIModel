@@ -110,6 +110,7 @@ renderer = new THREE.WebGLRenderer({
         animate();
     });
 
+
     function animate() {
         requestAnimationFrame(animate);
         const delta = clock.getDelta();
