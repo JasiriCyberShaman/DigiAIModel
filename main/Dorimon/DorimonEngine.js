@@ -33,10 +33,17 @@ export function initDorimon(containerId) {
     // --- ENGINE CORE ---
     scene = new THREE.Scene();
     clock = new THREE.Clock();
-    camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.001, 100);
+    // B. Narrow the Near/Far Plane
+// Reduces the 'search area' for the camera, making depth calculations more accurate
+camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.5, 20);
     camera.position.set(0, 1, 2);
 
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    // A. Increase Depth Precision
+renderer = new THREE.WebGLRenderer({ 
+    antialias: true, 
+    alpha: true,
+    logarithmicDepthBuffer: true // This is the "Magic Fix" for clipping/Z-fighting
+});
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
@@ -62,19 +69,24 @@ export function initDorimon(containerId) {
 
         model.traverse((child) => {
             if (child.isMesh && child.name === "DorimonMesh") {
-                bodyMaterial = child.material;
                 bodyMesh = child;
+        bodyMaterial = child.material;
 
-                        // RECTIFICATION: Ensures texture aligns with Blender's UV export
-                if (bodyMaterial.map) {
-                    bodyMaterial.map.flipY = false; 
-                    bodyMaterial.map.colorSpace = THREE.SRGBColorSpace;
-                }
-
-                // SIDES: Prevents "Inside-Out" rendering/clipping
-                bodyMaterial.side = THREE.FrontSide; 
-                bodyMaterial.needsUpdate = true;
-
+        // FORCE CORRECT RENDERING
+        bodyMaterial.side = THREE.FrontSide; // Only render the outside face
+        bodyMaterial.shadowSide = THREE.FrontSide;
+        bodyMaterial.flatShading = false; // Ensure smooth interpolation
+        
+        // COLOR BUFFER SYNC
+        if (bodyMaterial.map) {
+            bodyMaterial.map.flipY = false; 
+            bodyMaterial.map.colorSpace = THREE.SRGBColorSpace;
+            bodyMaterial.map.needsUpdate = true;
+        }
+        
+        bodyMaterial.needsUpdate = true;
+        console.log("[Dorimon OS]: Hardware Normals synchronized.");
+                
                 // FORCE INITIAL TEXTURE: Ensures he isn't black on boot
                 const texLoader = new THREE.TextureLoader();
                 const defaultTexUrl = `${REPO_BASE}/Neutral466.jpg`; // Ensure this path is correct
