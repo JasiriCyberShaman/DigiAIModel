@@ -49,6 +49,7 @@ export function initDorimon(containerId) {
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 3));
 
+    // --- 3. MODEL LOADING ---
     const loader = new GLTFLoader();
     loader.load(DEFAULT_MODEL, (gltf) => {
         const model = gltf.scene;
@@ -58,6 +59,18 @@ export function initDorimon(containerId) {
             if (child.isMesh && child.name === "DorimonMesh") {
                 bodyMaterial = child.material;
                 bodyMesh = child;
+
+                // FORCE INITIAL TEXTURE: Ensures he isn't black on boot
+                const texLoader = new THREE.TextureLoader();
+                const defaultTexUrl = `${REPO_BASE}/Neutral466.jpg`; // Ensure this path is correct
+                
+                texLoader.load(defaultTexUrl, (t) => {
+                    t.colorSpace = THREE.SRGBColorSpace;
+                    t.flipY = false;
+                    bodyMaterial.map = t;
+                    bodyMaterial.needsUpdate = true;
+                    console.log("[Dorimon OS]: Default texture successfully mapped.");
+                });
             }
         });
 
