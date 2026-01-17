@@ -47,6 +47,11 @@ export function initDorimon(containerId) {
     controls.dampingFactor = 0.05;
     controls.target.set(0, 0.01, 0);
 
+    // BRIGHTNESS FIX: Proper Color Management & Exposure
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.5; // Boosts global brightness
+
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 3));
 
     const loader = new GLTFLoader();
