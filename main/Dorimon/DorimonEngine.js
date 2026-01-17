@@ -34,7 +34,7 @@ export function initDorimon(containerId) {
     scene = new THREE.Scene();
     clock = new THREE.Clock();
     camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
-    camera.position.set(0, 0.5, 2);
+    camera.position.set(0, 0, .5);
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
@@ -45,7 +45,12 @@ export function initDorimon(containerId) {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.target.set(0, 0.5, 0);
+    controls.target.set(0, 0.01, 0);
+
+    // BRIGHTNESS FIX: Proper Color Management & Exposure
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.5; // Boosts global brightness
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 3));
 
