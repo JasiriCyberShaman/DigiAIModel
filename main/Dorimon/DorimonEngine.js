@@ -136,8 +136,8 @@ renderer = new THREE.WebGLRenderer({
         const { type, animation, visemes, morphName, value, rate, url } = e.data;
 
         if (type === "RESET_CAMERA") {
-            camera.position.set(0, 0.5, 2);
-            controls.target.set(0, 0.5, 0);
+            camera.position.set(0, 1, 2);
+            controls.target.set(0, 0.1, 0);
             controls.update();
         }
 
