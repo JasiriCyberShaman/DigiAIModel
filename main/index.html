@@ -1,0 +1,48 @@
+<div id="dorimon-container" style="width: 100%; height: 500px; background: transparent; cursor: grab; display: flex; align-items: center; justify-content: center;">
+    <div id="boot-status" style="color: #444; font-family: monospace; font-size: 12px;">Initializing Dorimon OS...</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+    const HOST_IP = '192.168.0.31'; 
+    const PORT = '8000';
+    
+    async function bootDorimon() {
+        // 🛠️ MATCHING YOUR CONFIRMED WORKING URL:
+        const BASE_PATH = `https://${HOST_IP}:${PORT}/Dorimon`; 
+        const container = document.getElementById('dorimon-container');
+        
+        try {
+            // Adding the versioning (?v=) is key to forcing a fresh load 
+            // of the script you just cleaned up!
+            const scriptUrl = `${BASE_PATH}/DorimonEngine.js?v=${Date.now()}`;
+            console.log(`🔌 [Boot]: Connection confirmed. Importing engine...`);
+
+            const module = await import(scriptUrl);
+            
+            // Success! Clear the status and boot the Three.js scene
+            container.innerHTML = ""; 
+            module.initDorimon('dorimon-container');
+
+            console.log(`✅ [Digimon OS]: Secure Boot Complete.`);
+
+        } catch (err) {
+            console.error("❌ [Secure Boot Failure]:", err);
+            container.innerHTML = `
+                <div style="color: #ff4444; font-family: monospace; text-align: center;">
+                    [SECURE BOOT ERROR]<br>
+                    <span style="font-size: 10px; color: #888;">Check console for pathing errors.</span>
+                </div>`;
+        }
+    }
+
+    bootDorimon();
+</script>

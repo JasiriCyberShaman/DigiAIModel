@@ -1,139 +1,129 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-let scene, camera, renderer, mixer, clock, controls;
-const actions = {};
-let currentBaseAction = null;
+/**
+ * CONFIGURATION & HARDWARE CONSTANTS
+ */
+const LOCAL_IP = "192.168.0.31";
+const MODEL_PATH = `https://${LOCAL_IP}:8000/Dorimon/DorimonComp.glb`;
 
-// Hardware References
+let scene, camera, renderer, mixer, clock;
 let bodyMesh = null;
 let bodyMaterial = null;
+let currentBaseAction = null;
+const actions = {};
 
-// 1. DEDICATED VISEME BUS (Lip Sync)
-const visemeTargets = { "A": 0, "E": 0, "I": 0, "O": 0, "U": 0, "BASE": 0 };
-const visemeCurrent = { "A": 0, "E": 0, "I": 0, "O": 0, "U": 0, "BASE": 0 };
-let mouthLerpRate = 0.15;
+// Linear Interpolation (Lerp) States: Stores where the mouth IS vs where it's GOING
+const visemeTargets = {
+    "viseme_sil": 0, "viseme_PP": 0, "viseme_FF": 0, "viseme_TH": 0,
+    "viseme_DD": 0, "viseme_kk": 0, "viseme_CH": 0, "viseme_SS": 0,
+    "viseme_nn": 0, "viseme_RR": 0, "viseme_aa": 0, "viseme_E": 0,
+    "viseme_I": 0, "viseme_O": 0, "viseme_U": 0, "viseme_AA": 0
+};
+const visemeCurrent = { ...visemeTargets }; // Current smoothed values
+let mouthLerpRate = 0.4; // Smoothing factor (0.1 = slow/mushy, 0.8 = fast/snappy)
 
-// 2. GENERIC MORPH BUS (GPIO for Expressions)
-const genericMorphTargets = {}; // Stores { "TargetName": targetValue }
-const genericMorphCurrent = {}; // Stores { "TargetName": currentValue }
-let genericLerpRate = 0.1;
+/**
+ * 1. TEXTURE CONTROLLER
+ * Swaps the face texture for different moods/emotions.
+ */
+export function setTexture(url) {
+    if (!bodyMaterial) return;
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous'); 
+    loader.load(url, (t) => {
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.flipY = false;
+        bodyMaterial.map = t;
+        bodyMaterial.needsUpdate = true;
+    });
+}
 
-const SCRIPT_URL = new URL(import.meta.url);
-const pathParts = SCRIPT_URL.pathname.split('/');
-pathParts.pop(); 
-const REPO_BASE = SCRIPT_URL.origin + pathParts.join('/');
-const DEFAULT_MODEL = `${REPO_BASE}/DorimonComp.glb`;
-
+/**
+ * 2. INITIALIZATION ENGINE
+ * Sets up the 3D world and loads the Digital Lifeform.
+ */
 export function initDorimon(containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // --- ENGINE CORE ---
+    // SCENE SETUP
     scene = new THREE.Scene();
     clock = new THREE.Clock();
-    // B. Narrow the Near/Far Plane
-// Reduces the 'search area' for the camera, making depth calculations more accurate
-camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.0001, 100);
-    camera.position.set(0, 1, 2);
+    camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.01, 100);
+    camera.position.set(0, 0.1, 0.5);
 
-    // A. Increase Depth Precision
-renderer = new THREE.WebGLRenderer({ 
-    antialias: true, 
-    alpha: true,
-    logarithmicDepthBuffer: true // This is the "Magic Fix" for clipping/Z-fighting
-});
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(renderer.domElement);
 
-    // --- INTERACTION CONTROLS ---
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.target.set(0, 0.01, 0);
+    // LIGHTING (The Cyber Shaman Glow)
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 2.5));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    dirLight.position.set(1, 2, 3);
+    scene.add(dirLight);
 
-    // BRIGHTNESS FIX: Proper Color Management & Exposure
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.5; // Boosts global brightness
-
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 3));
-
-    // --- 3. MODEL LOADING ---
+    // MODEL LOADING
     const loader = new GLTFLoader();
-    loader.load(DEFAULT_MODEL, (gltf) => {
+    loader.load(MODEL_PATH, (gltf) => {
         const model = gltf.scene;
         scene.add(model);
 
         model.traverse((child) => {
             if (child.isMesh && child.name === "DorimonMesh") {
                 bodyMesh = child;
-        bodyMaterial = child.material;
-        
-
-                
-                // FORCE INITIAL TEXTURE: Ensures he isn't black on boot
-                const texLoader = new THREE.TextureLoader();
-                const defaultTexUrl = `${REPO_BASE}/Neutral466.jpg`; // Ensure this path is correct
-                
-                texLoader.load(defaultTexUrl, (t) => {
-                    t.colorSpace = THREE.SRGBColorSpace;
-                    t.flipY = false;
-                    bodyMaterial.map = t;
-                    bodyMaterial.needsUpdate = true;
-                    console.log("[Dorimon OS]: Default texture successfully mapped.");
-                });
+                bodyMaterial = child.material;
+                // Expose to window for live console debugging if needed
+                window.bodyMesh = child;
             }
         });
 
+        // ANIMATION SETUP
         mixer = new THREE.AnimationMixer(model);
-        gltf.animations.forEach((clip) => {
-            actions[clip.name] = mixer.clipAction(clip);
-        });
-
+        gltf.animations.forEach(clip => actions[clip.name] = mixer.clipAction(clip));
+        
+        // Start with Idle behavior
         if (actions['Idle.001']) actions['Idle.001'].play();
+        
         animate();
     });
 
+    /**
+     * 3. THE FRAME LOOP (60fps)
+     * This handles the math for smooth movement every single frame.
+     */
     function animate() {
         requestAnimationFrame(animate);
         const delta = clock.getDelta();
 
-        if (bodyMesh) {
+        if (bodyMesh && bodyMesh.morphTargetDictionary) {
             const dict = bodyMesh.morphTargetDictionary;
-            if (dict) {
-                // Process Dedicated Visemes
-                Object.keys(visemeTargets).forEach(key => {
-                    if (dict[key] !== undefined) {
-                        visemeCurrent[key] += (visemeTargets[key] - visemeCurrent[key]) * mouthLerpRate;
-                        bodyMesh.morphTargetInfluences[dict[key]] = visemeCurrent[key];
-                    }
-                });
-
-                // Process Generic Morph Targets (expressions, twitches, etc.)
-                Object.keys(genericMorphTargets).forEach(name => {
-                    if (dict[name] !== undefined) {
-                        // Initialize current tracker if it doesn't exist
-                        if (genericMorphCurrent[name] === undefined) genericMorphCurrent[name] = 0;
-                        
-                        // Lerp towards target
-                        genericMorphCurrent[name] += (genericMorphTargets[name] - genericMorphCurrent[name]) * genericLerpRate;
-                        bodyMesh.morphTargetInfluences[dict[name]] = genericMorphCurrent[name];
-                    }
-                });
-            }
+            
+            // SMOTHED VISEME INTERPOLATION
+            // This prevents "shaking" and makes the mouth flow between shapes.
+            Object.keys(visemeTargets).forEach(key => {
+                const idx = dict[key];
+                if (idx !== undefined) {
+                    // Classic Lerp formula: Current += (Target - Current) * Factor
+                    visemeCurrent[key] += (visemeTargets[key] - visemeCurrent[key]) * mouthLerpRate;
+                    bodyMesh.morphTargetInfluences[idx] = visemeCurrent[key];
+                }
+            });
         }
 
-        if (controls) controls.update();
         if (mixer) mixer.update(delta);
         renderer.render(scene, camera);
     }
 
-    // --- SIGNAL HANDLER ---
+    /**
+     * 4. THE MESSAGE BUS (The Nervous System)
+     * Listens for signals from the Framer Overrides / Python Hub.
+     */
     window.addEventListener("message", (e) => {
-        const { type, animation, visemes, morphName, value, rate, url } = e.data;
+        const { type, animation, visemes, rate, url } = e.data;
+        if (!type) return;
 
         if (type === "RESET_CAMERA") {
             camera.position.set(0, 1, 2);
@@ -141,36 +131,32 @@ renderer = new THREE.WebGLRenderer({
             controls.update();
         }
 
-        // Dedicated Lip Sync Signal
-        if (type === "SET_VISEMES") {
-            if (rate) mouthLerpRate = rate;
-            Object.assign(visemeTargets, visemes);
-        }
+            case "SET_ANIMATION":
+                if (actions[animation]) {
+                    const next = actions[animation];
+                    const fade = rate || 0.5;
+                    if (currentBaseAction !== next) {
+                        next.reset().fadeIn(fade).play();
+                        if (currentBaseAction) currentBaseAction.fadeOut(fade);
+                        currentBaseAction = next;
+                    }
+                }
+                break;
 
-        // Generic Expression Signal (GPIO)
-        if (type === "SET_GENERIC_MORPH" && morphName) {
-            genericMorphTargets[morphName] = value;
-            if (rate) genericLerpRate = rate;
-            console.log(`[Dorimon OS]: Morph target '${morphName}' set to ${value}`);
-        }
-
-        if (type === "SET_ANIMATION" && actions[animation]) {
-            const next = actions[animation];
-            const fade = rate || 0.5;
-            if (currentBaseAction !== next) {
-                next.reset().fadeIn(fade).play();
-                if (currentBaseAction) currentBaseAction.fadeOut(fade);
-                currentBaseAction = next;
-            }
-        }
-
-        if (type === "SET_TEXTURE" && url && bodyMaterial) {
-            new THREE.TextureLoader().load(url, (t) => {
-                t.colorSpace = THREE.SRGBColorSpace;
-                t.flipY = false;
-                bodyMaterial.map = t;
-                bodyMaterial.needsUpdate = true;
-            });
+            case "SET_VISEMES":
+                // Reset all targets to 0 (Silence) before applying new weights
+                Object.keys(visemeTargets).forEach(k => visemeTargets[k] = 0);
+                
+                // Apply new viseme weights from the Wawa sensor
+                if (visemes) {
+                    Object.entries(visemes).forEach(([key, weight]) => {
+                        if (visemeTargets[key] !== undefined) {
+                            visemeTargets[key] = weight;
+                        }
+                    });
+                }
+                if (rate) mouthLerpRate = rate;
+                break;
         }
     });
 }
