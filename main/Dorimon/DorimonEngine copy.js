@@ -2,10 +2,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 /**
- * CONFIGURATION & HARDWARE CONSTANTS
+ * KUTI ENGINE v1.0 - The Cyber Shaman Neural Interface
  */
-const LOCAL_IP = "192.168.0.31";
-const MODEL_PATH = `https://${LOCAL_IP}:8000/Dorimon/DorimonComp.glb`;
 
 let scene, camera, renderer, mixer, clock;
 let bodyMesh = null;
@@ -13,21 +11,21 @@ let bodyMaterial = null;
 let currentBaseAction = null;
 const actions = {};
 
-// Linear Interpolation (Lerp) States: Stores where the mouth IS vs where it's GOING
+// Linear Interpolation (Lerp) States
 const visemeTargets = {
     "viseme_sil": 0, "viseme_PP": 0, "viseme_FF": 0, "viseme_TH": 0,
     "viseme_DD": 0, "viseme_kk": 0, "viseme_CH": 0, "viseme_SS": 0,
     "viseme_nn": 0, "viseme_RR": 0, "viseme_aa": 0, "viseme_E": 0,
     "viseme_I": 0, "viseme_O": 0, "viseme_U": 0, "viseme_AA": 0
 };
-const visemeCurrent = { ...visemeTargets }; // Current smoothed values
-let mouthLerpRate = 0.4; // Smoothing factor (0.1 = slow/mushy, 0.8 = fast/snappy)
+const visemeCurrent = { ...visemeTargets }; 
+let mouthLerpRate = 0.4; 
 
 /**
  * 1. TEXTURE CONTROLLER
- * Swaps the face texture for different moods/emotions.
+ * Swaps face textures (emotions) from any source URL.
  */
-export function setTexture(url) {
+export function setKutiTexture(url) {
     if (!bodyMaterial) return;
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin('anonymous'); 
@@ -41,9 +39,10 @@ export function setTexture(url) {
 
 /**
  * 2. INITIALIZATION ENGINE
- * Sets up the 3D world and loads the Digital Lifeform.
+ * @param {string} containerId - The HTML div ID
+ * @param {string} assetBase - The GitHub Pages URL (e.g., https://user.github.io/repo)
  */
-export function initDorimon(containerId) {
+export function initKuti(containerId, assetBase) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
@@ -65,18 +64,20 @@ export function initDorimon(containerId) {
     dirLight.position.set(1, 2, 3);
     scene.add(dirLight);
 
-    // MODEL LOADING
+    // MODEL LOADING FROM GITHUB
+    const MODEL_PATH = `${assetBase}/models/KutiComp.glb`;
     const loader = new GLTFLoader();
+    
     loader.load(MODEL_PATH, (gltf) => {
         const model = gltf.scene;
         scene.add(model);
 
         model.traverse((child) => {
-            if (child.isMesh && child.name === "DorimonMesh") {
+            // Updated name check for KutiMesh
+            if (child.isMesh && (child.name === "KutiMesh" || child.name === "DorimonMesh")) {
                 bodyMesh = child;
                 bodyMaterial = child.material;
-                // Expose to window for live console debugging if needed
-                window.bodyMesh = child;
+                window.bodyMesh = child; // Debug access
             }
         });
 
@@ -88,25 +89,19 @@ export function initDorimon(containerId) {
         if (actions['Idle.001']) actions['Idle.001'].play();
         
         animate();
+    }, undefined, (error) => {
+        console.error("❌ [Kuti Loader Error]:", error);
     });
 
-    /**
-     * 3. THE FRAME LOOP (60fps)
-     * This handles the math for smooth movement every single frame.
-     */
     function animate() {
         requestAnimationFrame(animate);
         const delta = clock.getDelta();
 
         if (bodyMesh && bodyMesh.morphTargetDictionary) {
             const dict = bodyMesh.morphTargetDictionary;
-            
-            // SMOTHED VISEME INTERPOLATION
-            // This prevents "shaking" and makes the mouth flow between shapes.
             Object.keys(visemeTargets).forEach(key => {
                 const idx = dict[key];
                 if (idx !== undefined) {
-                    // Classic Lerp formula: Current += (Target - Current) * Factor
                     visemeCurrent[key] += (visemeTargets[key] - visemeCurrent[key]) * mouthLerpRate;
                     bodyMesh.morphTargetInfluences[idx] = visemeCurrent[key];
                 }
@@ -118,22 +113,13 @@ export function initDorimon(containerId) {
     }
 
     /**
-     * 4. THE MESSAGE BUS (The Nervous System)
-     * Listens for signals from the Framer Overrides / Python Hub.
+     * 3. THE MESSAGE BUS
      */
     window.addEventListener("message", (e) => {
-        const { type, animation, visemes, rate, url } = e.data;
+        const { type, animation, visemes, rate } = e.data;
         if (!type) return;
 
         switch (type) {
-            case "RESET_CAMERA":
-                camera.position.set(0, 1, 2);
-                if (window.controls) {
-                    window.controls.target.set(0, 0.1, 0);
-                    window.controls.update();
-                }
-                break;
-
             case "SET_ANIMATION":
                 if (actions[animation]) {
                     const next = actions[animation];
@@ -147,15 +133,10 @@ export function initDorimon(containerId) {
                 break;
 
             case "SET_VISEMES":
-                // Reset all targets to 0 (Silence) before applying new weights
                 Object.keys(visemeTargets).forEach(k => visemeTargets[k] = 0);
-                
-                // Apply new viseme weights from the Wawa sensor
                 if (visemes) {
                     Object.entries(visemes).forEach(([key, weight]) => {
-                        if (visemeTargets[key] !== undefined) {
-                            visemeTargets[key] = weight;
-                        }
+                        if (visemeTargets[key] !== undefined) visemeTargets[key] = weight;
                     });
                 }
                 if (rate) mouthLerpRate = rate;
