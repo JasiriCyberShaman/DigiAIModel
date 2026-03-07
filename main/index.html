@@ -23,13 +23,17 @@
         try {
             // Adding the versioning (?v=) is key to forcing a fresh load 
             // of the script you just cleaned up!
-            const scriptUrl = `${BASE_PATH}/DorimonEngine.js?v=${Date.now()}`;
-            console.log(`🔌 [Boot]: Connection confirmed. Importing engine...`);
+            // --- Inside your Framer script tag ---
+            const GITHUB_ASSETS_URL = 'https://bryantgill.github.io/shaman-assets'; 
 
+            // Import Kuti instead of Dorimon
+            const scriptUrl = `${GITHUB_ASSETS_URL}/KutiEngine.js?v=${Date.now()}`;
             const module = await import(scriptUrl);
-            
-            // Success! Clear the status and boot the Three.js scene
+
+            // Clear status and boot with the GitHub Base path
             container.innerHTML = ""; 
+            module.initKuti('dorimon-container', GITHUB_ASSETS_URL);
+
             module.initDorimon('dorimon-container');
 
             console.log(`✅ [Digimon OS]: Secure Boot Complete.`);
